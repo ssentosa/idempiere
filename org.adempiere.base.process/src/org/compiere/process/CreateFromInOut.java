@@ -104,6 +104,7 @@ public class CreateFromInOut extends SvrProcess
 		try
 		{
 			pstmt = DB.prepareStatement(sql.toString(), get_TrxName());
+			int AD_PInstance_ID = getAD_PInstance_ID();
 			pstmt.setInt(1, getAD_PInstance_ID());
 			rs = pstmt.executeQuery();
 			while (rs.next())

@@ -22,10 +22,13 @@ import java.sql.ResultSet;
 import java.util.Properties;
 import java.util.logging.Level;
 
+import org.compiere.model.MAttachment;
 import org.compiere.model.MBankAccount;
 import org.compiere.model.MBankStatement;
 import org.compiere.model.MBankStatementLine;
+import org.compiere.model.MCharge;
 import org.compiere.model.MProcessPara;
+import org.compiere.model.Query;
 import org.compiere.model.X_I_BankStatement;
 import org.compiere.util.CLogger;
 import org.compiere.util.DB;
@@ -209,7 +212,23 @@ public class ImportBankStatement extends SvrProcess
 		if (no != 0)
 			log.warning("Invalid Currency=" + no);
 		
-		 
+		//Set Payment
+		sql = new StringBuilder("UPDATE I_BankStatement i ")
+			.append("SET PaymentDocumentNo=ReferenceNo ")
+			.append("WHERE i.C_Payment_ID IS NULL ")
+			.append(clientCheck);
+		no = DB.executeUpdateEx(sql.toString(), get_TrxName());
+		if (no != 0)
+			if (log.isLoggable(Level.INFO)) log.info("Set PaymentString=" + no);
+		sql = new StringBuilder("UPDATE I_BankStatement i ")
+			.append("SET C_Payment_ID=(SELECT C_Payment_ID FROM C_Payment WHERE DocumentNo=i.PaymentDocumentNo) ")
+			.append("WHERE i.C_Payment_ID IS NULL ")
+			.append(clientCheck);
+		no = DB.executeUpdateEx(sql.toString(), get_TrxName());
+		if (no != 0)
+			if (log.isLoggable(Level.INFO)) log.info("Set Currency=" + no);
+				
+		
 		//	Set Amount
 		 sql = new StringBuilder("UPDATE I_BankStatement ")
 		 	.append("SET ChargeAmt=0 ")
@@ -467,18 +486,35 @@ public class ImportBankStatement extends SvrProcess
 				line.setValutaDate(imp.getValutaDate());
 				line.setIsReversal(imp.isReversal());
 				line.setC_Currency_ID(imp.getC_Currency_ID());
-				line.setTrxAmt(imp.getTrxAmt());
-				line.setStmtAmt(imp.getStmtAmt());
+				
 				if (imp.getC_Charge_ID() != 0)
 				{
 					line.setC_Charge_ID(imp.getC_Charge_ID());
+					line.setChargeAmt(imp.getChargeAmt());
+					
 				}
 				line.setInterestAmt(imp.getInterestAmt());
-				line.setChargeAmt(imp.getChargeAmt());
 				line.setMemo(imp.getMemo());
+
+				line.setStmtAmt(imp.getStmtAmt());
 				if (imp.getC_Payment_ID() != 0)
 				{
 					line.setC_Payment_ID(imp.getC_Payment_ID());
+					line.setTrxAmt(imp.getTrxAmt());
+					if(imp.getStmtAmt().compareTo(Env.ZERO) > 0) {
+						line.set_ValueOfColumn("isReturn", true);
+					}
+				}else {
+					MCharge ch = new Query(statement.getCtx(), MCharge.Table_Name, "Name = ? ", statement.get_TrxName())
+							.setParameters("DEFAULT CHARGE")
+							.setClient_ID()
+							.setOnlyActiveRecords(true)
+							.first();
+					if(ch != null) {
+						line.setC_Charge_ID(ch.get_ID());
+						line.setChargeAmt(imp.getStmtAmt());
+						
+					}
 				}
 				
 				//	Copy statement line reference data
